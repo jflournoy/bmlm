@@ -3,9 +3,12 @@
 data {
     int<lower=1> N;             // Number of observations
     int<lower=1> J;             // Number of participants
+    //NOTE: add number of ROIs
     int<lower=1,upper=J> id[N]; // Participant IDs
+    //NOTE: add vector of ROI ids
     vector[N] X;                // Manipulated variable
     vector[N] M;                // Mediator
+    //NOTE: add matrix of covariates
     // Priors
     real prior_dm;
     real prior_dy;
@@ -18,6 +21,8 @@ data {
     real prior_tau_b;
     real prior_tau_cp;
     real prior_lkj_shape;
+    //NOTE: add priors for covar matrix params
+    //NODE: add priors for ROI random effects covariance matrix
     vector[N] Y;                // Continuous outcome
 }
 transformed data{
@@ -29,6 +34,7 @@ parameters{
     real dy;                    // Intercept
     real cp;                    // X to Y effect
     real b;                     // M to Y effect
+    //NOTE: add vector of coefs for Y on covariates
     // Regression M on X
     real dm;                    // Intercept
     real a;                     // X to M effect
@@ -37,15 +43,18 @@ parameters{
     // Correlation matrix and SDs of participant-level varying effects
     cholesky_factor_corr[K] L_Omega;
     vector<lower=0>[K] Tau;
+    //NOTE: add correlation matrix and SDs of roi-level varying effects
 
     // Standardized varying effects
     matrix[K, J] z_U;
     real<lower=0> sigma_y;      // Residual
+    //NOTE: add standardized varying effects for ROI varying effects
 }
 transformed parameters {
     // Participant-level varying effects
     matrix[J, K] U;
     U = (diag_pre_multiply(Tau, L_Omega) * z_U)';
+    //NOTE: add roi-level varying effects transform
 }
 model {
     // Means of linear models
@@ -57,6 +66,7 @@ model {
     a ~ normal(0, prior_a);
     b ~ normal(0, prior_b);
     cp ~ normal(0, prior_cp);
+    //NOTE: add model for vector of coefs for Y on covariates
     // SDs and correlation matrix
     Tau[1] ~ cauchy(0, prior_tau_cp);   // u_cp
     Tau[2] ~ cauchy(0, prior_tau_b);    // u_b
@@ -64,11 +74,15 @@ model {
     Tau[4] ~ cauchy(0, prior_tau_dy);   // u_intercept_y
     Tau[5] ~ cauchy(0, prior_tau_dm);   // u_intercept_m
     L_Omega ~ lkj_corr_cholesky(prior_lkj_shape);
+    //NOTE: add SDs and correlation matrix for ROI-varying effects.
+    //      this includes cp, b, a, dy, and dm.
     // Allow vectorized sampling of varying effects via stdzd z_U
     to_vector(z_U) ~ normal(0, 1);
+    //NOTE: allow vectorized sampling of ROI-varying effects via stdzd z_U
 
     // Regressions
     for (n in 1:N){
+        //NOTE: need to include covariate matrix algebra and ROI-varying effects from U_roi matrix
         mu_y[n] = (cp + U[id[n], 1]) * X[n] +
                   (b + U[id[n], 2]) * M[n] +
                   (dy + U[id[n], 4]);
@@ -80,6 +94,7 @@ model {
     M ~ normal(mu_m, sigma_m);
 }
 generated quantities{
+    //NOTE: Include relevant generated quantities for new ROI-varying effect covariance
     matrix[K, K] Omega;         // Correlation matrix
     matrix[K, K] Sigma;         // Covariance matrix
 
