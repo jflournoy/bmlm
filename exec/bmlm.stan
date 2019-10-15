@@ -35,12 +35,12 @@ data {
     int<lower=1> Ly;            // Number of participant-varying covariates, y equation
     int<lower=1> Lm;            // Number of participant-varying covariates, m equation
     int<lower=1,upper=J> id[N]; // Participant IDs
-    int<lower=1,upper=K> rio[N];// ROI ids
+    int<lower=1,upper=K> roi[N];// ROI ids
     vector[N] X;                // Treatment variable
     vector[N] M;                // Mediator
     vector[N] Time;             // Time variable for de-meaning
-    matrix[J, Ly] Cy;           // participant-varying covariates, y equation
-    matrix[J, Lm] Cm;           // participant-varying covariates, m equation
+    matrix[N, Ly] Cy;           // participant/ROI-varying covariates, y equation - we just assume the coefficients for these do not vary by ID or ROI though the values of the variables might differ within participant by ROI, or within ROI by participant
+    matrix[N, Lm] Cm;           // participant/ROI-varying covariates, m equation - we just assume the coefficients for these do not vary by ID or ROI though the values of the variables might differ within participant by ROI, or within ROI by participant
     //// Values here allow user to specificy different SDs for the normal
     //// (centered at 0) priors for all these parameters
     // Population Param Priors
@@ -76,8 +76,8 @@ data {
     vector[N] Y;                // Continuous outcome
 }
 transformed data{
-    int M;                      // Number of person & ROI-varying variables
-    M = 7;                      // dm, dy, a, b, cp, ty, tm
+    int P;                      // Number of person & ROI-varying variables
+    P = 7;                      // dm, dy, a, b, cp, ty, tm
 }
 parameters{
     // Regression Y on X and M
@@ -94,25 +94,24 @@ parameters{
     real<lower=0> sigma_m;      // Residual
 
     // Correlation matrix and SDs of participant-level varying effects
-    cholesky_factor_corr[M] L_Omega_id;
-    vector<lower=0>[M] Tau_id;
+    cholesky_factor_corr[P] L_Omega_id;
+    vector<lower=0>[P] Tau_id;
     // Correlation matrix and SDs of roi-level varying effects
-    cholesky_factor_corr[M] L_Omega_roi;
-    vector<lower=0>[M] Tau_roi;
+    cholesky_factor_corr[P] L_Omega_roi;
+    vector<lower=0>[P] Tau_roi;
 
     // Standardized varying effects
-    matrix[M, J] z_U;
-    matrix[M, K] z_V;
+    matrix[P, J] z_U;
+    matrix[P, K] z_V;
     real<lower=0> sigma_y;      // Residual
 }
 transformed parameters {
     // Participant-level varying effects
-    matrix[J, M] U;
-    U = (diag_pre_multiply(Tau_id, L_Omega_id) * z_U)';
+    matrix[J, P] U;
     // ROI-level varying effects
-    matrix[K, M] V;
+    matrix[K, P] V;
+    U = (diag_pre_multiply(Tau_id, L_Omega_id) * z_U)';
     V = (diag_pre_multiply(Tau_roi, L_Omega_roi) * z_V)';
-    //NOTE: add roi-level varying effects transform
 }
 model {
     // Means of linear models
@@ -126,8 +125,8 @@ model {
     a ~ normal(0, prior_a);
     b ~ normal(0, prior_b);
     cp ~ normal(0, prior_cp);
-    ybeta ~ normal(0, prior_ybeta) //NOTE: should this be vectorized so prior_ybeta is of length Ly?
-    mbeta ~ normal(0, prior_mbeta) //NOTE: ditto above.
+    ybeta ~ normal(0, prior_ybeta); //NOTE: should this be vectorized so prior_ybeta is of length Ly?
+    mbeta ~ normal(0, prior_mbeta); //NOTE: ditto above.
     // SDs and correlation matrix ID-varying
     Tau_id[1] ~ cauchy(0, prior_id_tau_cp);   // u_cp
     Tau_id[2] ~ cauchy(0, prior_id_tau_b);    // u_b
@@ -156,10 +155,10 @@ model {
         mu_y[n] = (cp + U[id[n], 1] + V[roi[n], 1]) * X[n] +
                   (b + U[id[n], 2] + V[roi[n], 2]) * M[n] +
                   (ty + U[id[n], 6] + V[roi[n], 6]) * Time[n] +
-                  (dy + Cy[id[n]]*ybeta + U[id[n], 4] + V[roi[n], 4]);
+                  (dy + Cy[n]*ybeta + U[id[n], 4] + V[roi[n], 4]);
         mu_m[n] = (a + U[id[n], 3] + V[roi[n], 3]) * X[n] +
                   (tm + U[id[n], 7] + V[roi[n], 7]) * Time[n] +
-                  (dm + Cm[id[n]]*mbeta + U[id[n], 5] + V[roi[n], 5]);
+                  (dm + Cm[n]*mbeta + U[id[n], 5] + V[roi[n], 5]);
     }
     // Data model
     Y ~ normal(mu_y, sigma_y);
@@ -167,8 +166,10 @@ model {
 }
 generated quantities{
     //NOTE: Include relevant generated quantities for new ROI-varying effect covariance
-    matrix[M, M] Omega;         // Correlation matrix
-    matrix[M, M] Sigma;         // Covariance matrix
+    matrix[P, P] Omega_id;         // Correlation matrix
+    matrix[P, P] Sigma_id;         // Covariance matrix
+    matrix[P, P] Omega_roi;         // Correlation matrix
+    matrix[P, P] Sigma_roi;         // Covariance matrix
 
     // Average mediation parameters
     real covab_id;              // a-b covariance across IDs
@@ -249,8 +250,8 @@ generated quantities{
     //      factor.
     covab_id = Sigma_id[3,2];
     corrab_id = Omega_id[3,2];
-    cova_roi = Sigm_roi[3,2];
-    corra_roi = Omeg_roi[3,2];
+    covab_roi = Sigma_roi[3,2];
+    corrab_roi = Omega_roi[3,2];
     me = a*b + covab_id + covab_roi;
     c = cp + me;
     pme = me / c;
@@ -268,15 +269,15 @@ generated quantities{
         u_pme[j] = u_me[j] / u_c[j];
     }
     for (k in 1:K) {
-        u_a[k] = a + U[k, 3];
-        u_b[k] = b + U[k, 2];
-        u_me[k] = (a + U[k, 3]) * (b + U[j, 2]) + covab_id; // include covariance due to the ROI grouping factor
-        u_cp[k] = cp + U[k, 1];
-        u_dy[k] = dy + U[k, 4];
-        u_dm[k] = dm + U[k, 5];
-        u_ty[k] = ty + U[k, 6];
-        u_tm[k] = tm + U[k, 7];
-        u_c[k] = u_cp[k] + u_me[k];
-        u_pme[k] = u_me[k] / u_c[k];
+        v_a[k] = a + V[k, 3];
+        v_b[k] = b + V[k, 2];
+        v_me[k] = (a + V[k, 3]) * (b + V[k, 2]) + covab_id; // inclVde covariance dVe to the ROI groVping factor
+        v_cp[k] = cp + V[k, 1];
+        v_dy[k] = dy + V[k, 4];
+        v_dm[k] = dm + V[k, 5];
+        v_ty[k] = ty + V[k, 6];
+        v_tm[k] = tm + V[k, 7];
+        v_c[k] = v_cp[k] + v_me[k];
+        v_pme[k] = v_me[k] / v_c[k];
     }
 }
