@@ -2,9 +2,19 @@ library(data.table)
 library(rstan)
 setwd('~/otherhome/code/bmlm/')
 
-model_s <- rstan::stan_model('exec/bmlm.stan', model_name = 'mlm', auto_write = TRUE)
+MAPRECT=FALSE
+if(MAPRECT){
+    model_s <- rstan::stan_model('exec/bmlm_map_rect.stan', model_name = 'mlm', auto_write = TRUE)
+    Sys.setenv("STAN_NUM_THREADS" = 8)
+} else {
+    model_s <- rstan::stan_model('exec/bmlm.stan', model_name = 'mlm', auto_write = TRUE)
+}
 
 load('data/sea_fearGTcalm_stress_psych.rda')
+
+##!!!!
+# Need to ensure data is ordered by ROI for map_rect
+###
 
 sea_fearGTcalm_stress_psych[, id_idx := as.numeric(as.factor(sea_fearGTcalm_stress_psych$idnum))]
 sea_fearGTcalm_stress_psych[, roi_idx := as.numeric(as.factor(sea_fearGTcalm_stress_psych$roi))]
@@ -102,6 +112,14 @@ ld$K <- length(unique(ld$roi))
 ld$Ly <- ncol(ld$Cy)
 ld$Lm <- ncol(ld$Cm)
 ld <- append(ld, priors)
+
+N_per_roi <- unlist(lapply(split(ld$X, ld$roi), function(x) sum(!is.na(x))))
+if(all(max(N_per_roi) - min(N_per_roi) == 0)){
+    message(N_per_roi[[1]], ' data points for each ROI. Continuing...')
+} else if(MAPRECT){
+    stop('Cannot continue, unequal data size for some ROIs!')
+}
+
 
 # Sample from model
 message("Estimating model, please wait.")

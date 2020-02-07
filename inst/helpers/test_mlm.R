@@ -2,9 +2,15 @@ library(dplyr)
 library(tidyr)
 library(rstan)
 
-load('data/sea_data.rda')
+load('data/sea_fearGTcalm_stress_psych.rda')
 
-model_s <- rstan::stan_model('exec/bmlm.stan', model_name = 'mlm', auto_write = TRUE)
+MAPRECT=FALSE
+if(MAPRECT){
+    model_s <- rstan::stan_model('exec/bmlm_map_rect.stan', model_name = 'mlm', auto_write = TRUE)
+    Sys.setenv("STAN_NUM_THREADS" = 8)
+} else {
+    model_s <- rstan::stan_model('exec/bmlm.stan', model_name = 'mlm', auto_write = TRUE)
+}
 
 ###
 

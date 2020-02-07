@@ -76,8 +76,36 @@ data {
     vector[N] Y;                // Continuous outcome
 }
 transformed data{
-    int P;                      // Number of person & ROI-varying variables
-    P = 7;                      // dm, dy, a, b, cp, ty, tm
+    int P = 7;                      // Number of person & ROI-varying variables: dm, dy, a, b, cp, ty, tm
+                                    //   That is, intercept for m and y equations, a path, b path, c prime path, and 2 time effects.
+    int Nr = 4 + Ly + Lm;           // Number of real-valued variables: Y, X, M, Time and the covariates
+    int Ni = 1;                     // Number of int-valued variables
+    int<lower = 0> slen = N / K;
+    real x_r[K, slen * Nr];         // Array with a row per shard, and enough columns to hold all the real data
+    int<lower=1,upper=J> x_i[K, slen * Ni];
+
+    // Make Shards, one per K rois
+    {
+        for (k in 1:K){
+            int beg = 1 + (k-1)*slen;
+            int end = k*slen;
+            x_r[k, 1:slen] = to_array_1d(Y[ beg:end ]);
+            x_r[k, (slen+1):(2*slen)] = to_array_1d(X[ beg:end ]);
+            x_r[k, (slen+1):(3*slen)] = to_array_1d(M[ beg:end ]);
+            x_r[k, (slen+1):(4*slen)] = to_array_1d(Time[ beg:end ]);
+
+            //matrix[N, Ly] Cy;
+            for (lyi in 1:Ly){
+                x_r[k, (slen+1):((4 + lyi)*slen)] = to_array_1d(Cy[ beg:end, lyi ]);
+            }
+            //matrix[N, Lm] Cm;
+            for (lmi in 1:Lm){
+                x_r[k, (slen+1):((4 + Ly + lmi)*slen)] = to_array_1d(Cm[ beg:end, lmi ]);
+            }
+            //int<lower=1,upper=J> id[N];
+            x_i[k] = id[ beg:end ];
+        }
+    }
 }
 parameters{
     // Regression Y on X and M
@@ -102,7 +130,7 @@ parameters{
 
     // Standardized varying effects
     matrix[P, J] z_U;
-    matrix[P, K] z_V;
+    matrix[P, K] z_V;           //shardable over K ROIS
     real<lower=0> sigma_y;      // Residual
 }
 transformed parameters {
@@ -148,10 +176,9 @@ model {
 
     // Allow vectorized sampling of varying effects via stdzd z_U, z_V
     to_vector(z_U) ~ normal(0, 1);
-    to_vector(z_V) ~ normal(0, 1);
+    to_vector(z_V) ~ normal(0, 1);//shardable over K rois
 
     // Regressions
-    // NOTE: Vectorize?
     for (n in 1:N){
         mu_y[n] = (cp + U[id[n], 1] + V[roi[n], 1]) * X[n] +
                   (b + U[id[n], 2] + V[roi[n], 2]) * M[n] +
