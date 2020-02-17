@@ -148,7 +148,7 @@ transformed data{
     int Ni = 1;                     // Number of int-valued variables
     int<lower = 0> slen = N / K;    // Number of observations per variable per shard, assumes equal number of obs per K
     real x_r[K, slen * Nr];         // Array with a row per shard, and enough columns to hold all the real data
-    int<lower=1,upper=J> x_i[K, slen * Ni + n_int]; // Ditto, interger data.
+    int  x_i[K, slen * Ni + n_int]; // Ditto, interger data.
 
     // Make Shards, one per K rois
     {
