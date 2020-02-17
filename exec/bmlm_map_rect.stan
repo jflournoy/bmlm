@@ -42,17 +42,16 @@ functions {
         int Lm = xi[6];
         int J = xi[7];
         // target += sum(map_rect(hlm_med, append_row(gammas,
-        //                                      append_row(ybeta,
-        //                                       append_row(mbeta,
-        //                                        append_row(to_vector(U),
-        //                                         append_row(to_vector(sigma_y), sigma_m)))))))),
-        //                            Vs, xr, xi));
+        //                                  append_row(ybeta,
+        //                                   append_row(mbeta,
+        //                                    append_row(to_vector(U), sigmas)))),
+        //                        Vs, x_r, x_i));
         vector[P] gammas = global[1:P];
-        vector[Ly] ybeta = global[(P+1):(P+1+Ly)];           // ID-varying covariates to Y
-        vector[Lm] mbeta = global[(P+2+Ly):(P+2+Ly+Lm)];           // ID-varying covariates to M
-        matrix[J,P] U = to_matrix(global[(P+3+Ly+Lm):(P+3+Ly+Lm+J*P)], J, P);
-        real sigma_m = global[P+4+Ly+Lm+J*P];      // Residual
-        real sigma_y = global[P+5+Ly+Lm+J*P];      // Residual
+        vector[Ly] ybeta = global[(P+1):(P+Ly)];           // ID-varying covariates to Y
+        vector[Lm] mbeta = global[(P+Ly+1):(P+Ly+Lm)];           // ID-varying covariates to M
+        matrix[J,P] U = to_matrix(global[(P+Ly+Lm+1):(P+Ly+Lm+J*P)], J, P);
+        real sigma_m = global[P+Ly+Lm+J*P+1];      // Residual
+        real sigma_y = global[P+Ly+Lm+J*P+2];      // Residual
         // x_r[k, (0*slen+1):(1*slen)] = to_array_1d(Y[ beg:end ]);
         // x_r[k, (1*slen+1):(2*slen)] = to_array_1d(X[ beg:end ]);
         // x_r[k, (2*slen+1):(3*slen)] = to_array_1d(M[ beg:end ]);
