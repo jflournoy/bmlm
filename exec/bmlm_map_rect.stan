@@ -70,7 +70,7 @@ functions {
         // }
         matrix[nn, Ly] Cy;
         matrix[nn, Lm] Cm;
-        int id[nn] = xi[8:nn];
+        int id[nn] = xi[8:(nn+7)];
         vector[nn] mu_y;
         vector[nn] mu_m;
         real lly;
@@ -88,17 +88,17 @@ functions {
         //     3 real b;                     // M to Y effect
         //     4 real ty;                    // t to Y effect
         mu_y = (gammas[2] + U[id, 1] + Vs[1]) .* X +
-        (gammas[3] + U[id, 2] + Vs[2]) .* M +
-        (gammas[4] + U[id, 6] + Vs[6]) .* Time +
-        (gammas[1] + Cy*ybeta + U[id, 4] + Vs[4]);
+               (gammas[3] + U[id, 2] + Vs[2]) .* M +
+               (gammas[4] + U[id, 6] + Vs[6]) .* Time +
+               (gammas[1] + Cy*ybeta + U[id, 4] + Vs[4]);
         // Regression M on X
         //     5 real dm;                    // Intercept
         //     6 real a;                     // X to M effect
         //     7 real tm;                    // t to M effect
 
         mu_m = (gammas[6] + U[id, 3] + Vs[3]) .* X +
-        (gammas[7] + U[id, 7] + Vs[7]) .* Time +
-        (gammas[5] + Cm*mbeta + U[id, 5] + Vs[5]);
+               (gammas[7] + U[id, 7] + Vs[7]) .* Time +
+               (gammas[5] + Cm*mbeta + U[id, 5] + Vs[5]);
         // // Data model
         // Y ~ normal(mu_y, sigma_y);
         // M ~ normal(mu_m, sigma_m);
