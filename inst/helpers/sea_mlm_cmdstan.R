@@ -1,7 +1,7 @@
 library(data.table)
 library(rstan)
-setwd('~/otherhome/code/bmlm/')
-
+#setwd('~/otherhome/code/bmlm/')
+setwd('~/code_new/bmlm/')
 
 ##!!!!
 # Need to ensure data is ordered by ROI for map_rect
@@ -93,7 +93,9 @@ if(all(max(N_per_roi) - min(N_per_roi) == 0)){
 
 # Write data
 
-stan_rdump(ls(ld), file.path('~/otherhome/code/cmdstan/roi_hlm', "roi_hlm_input.R"), envir = list2env(ld))
+stan_rdump(ls(ld), file.path('~/code_new/cmdstan/roi_hlm', "roi_hlm_input.R"), envir = list2env(ld))
+
+#funcs <- rstan::expose_stan_functions('exec/bmlm_map_rect.stan')
 
 #' export STAN_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 #' time ./bmlm_map_rect sample num_samples=1000 num_warmup=1000 output file=fit_map.csv data file=roi_hlm_input.R
@@ -106,5 +108,5 @@ stan_rdump(ls(ld), file.path('~/otherhome/code/cmdstan/roi_hlm', "roi_hlm_input.
 #     pars = c("U", "z_U", "V", "z_V", "L_Omega_id", "Tau_id", "Sigma_id", "L_Omega_roi", "Tau_roi", "Sigma_roi"),
 #     include = FALSE,
 #     chains = 6, iter = 4000, cores = 6, warmup = 1000)
-# 
+#
 # saveRDS(fit, 'data/sea_roi_fit-eptot_gad-td10.rds')

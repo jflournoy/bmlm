@@ -234,7 +234,7 @@ transformed parameters {
       }
 
       for(k in 1:K){
-        Vs[K,] = to_vector(V[K,]);
+        Vs[k,] = to_vector(V[k,]);
       }
     }
 }
@@ -401,30 +401,27 @@ generated quantities{
     c = gammas[2] + me;
     pme = me / c;
 
-    for (j in 1:J) {
-        u_a[j] = gammas[6] + U[j, 3];
-        u_b[j] = gammas[3] + U[j, 2];
-        u_cp[j] = gammas[2] + U[j, 1];
-        u_dy[j] = gammas[1] + U[j, 4];
-        u_dm[j] = gammas[5] + U[j, 5];
-        u_ty[j] = gammas[4] + U[j, 6];
-        u_tm[j] = gammas[7] + U[j, 7];
-        u_me[j] = (gammas[6] + U[j, 3]) * (gammas[3] + U[j, 2]) + covab_roi; // include covariance due to the ROI grouping factor
-        u_c[j] = u_cp[j] + u_me[j];
-        u_pme[j] = u_me[j] / u_c[j];
-    }
-    for (k in 1:K) {
-        v_a[k] = gammas[6]+ V[k, 3];
-        v_b[k] = gammas[3]+ V[k, 2];
-        v_cp[k] = gammas[2] + V[k, 1];
-        v_dy[k] = gammas[1] + V[k, 4];
-        v_dm[k] = gammas[5] + V[k, 5];
-        v_ty[k] = gammas[4] + V[k, 6];
-        v_tm[k] = gammas[7] + V[k, 7];
-        v_me[k] = (gammas[6] + V[k, 3]) * (gammas[3] + V[k, 2]) + covab_id; // inclVde covariance dVe to the ROI groVping factor
-        v_c[k] = v_cp[k] + v_me[k];
-        v_pme[k] = v_me[k] / v_c[k];
-    }
+    u_a = gammas[6] + U[, 3];
+    u_b = gammas[3] + U[, 2];
+    u_cp = gammas[2] + U[, 1];
+    u_dy = gammas[1] + U[, 4];
+    u_dm = gammas[5] + U[, 5];
+    u_ty = gammas[4] + U[, 6];
+    u_tm = gammas[7] + U[, 7];
+    u_me = (gammas[6] + U[, 3]) .* (gammas[3] + U[, 2]) + covab_roi; // include covariance due to the ROI grouping factor
+    u_c = u_cp + u_me;
+    u_pme = u_me ./ u_c;
+
+    v_a = gammas[6]+ V[, 3];
+    v_b = gammas[3]+ V[, 2];
+    v_cp = gammas[2] + V[, 1];
+    v_dy = gammas[1] + V[, 4];
+    v_dm = gammas[5] + V[, 5];
+    v_ty = gammas[4] + V[, 6];
+    v_tm = gammas[7] + V[, 7];
+    v_me = (gammas[6] + V[, 3]) .* (gammas[3] + V[, 2]) + covab_id; // include covariance due to the ROI grouping factor
+    v_c = v_cp + v_me;
+    v_pme = v_me ./ v_c;
 
     {
         vector[N] mu_y;
