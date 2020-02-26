@@ -48,7 +48,7 @@ functions {
         //                        Vs, x_r, x_i));
         vector[P] gammas = global[1:P];
         vector[Ly] ybeta = global[(P+1):(P+Ly)];           // ID-varying covariates to Y
-        vector[Lm] mbeta = global[(P+Ly+1):(P+Ly+Lm)];           // ID-varying covariates to M
+        vector[Lm] mbeta = global[(P+Ly+1):(P+Ly+Lm)];     // ID-varying covariates to M
         matrix[J,P] U = to_matrix(global[(P+Ly+Lm+1):(P+Ly+Lm+J*P)], J, P);
         real sigma_m = global[P+Ly+Lm+J*P+1];      // Residual
         real sigma_y = global[P+Ly+Lm+J*P+2];      // Residual
@@ -82,21 +82,22 @@ functions {
         for(lmi in 1:Lm){
             Cm[,lmi] = to_vector(xr[((4+Ly+lmi-1)*nn+1):((4+Ly+lmi)*nn)]);
         }
+
         // Regressions
         //     1 real dy;                    // Intercept
         //     2 real cp;                    // X to Y effect
         //     3 real b;                     // M to Y effect
         //     4 real ty;                    // t to Y effect
-        mu_y = (gammas[2] + U[id, 1] + Vs[1]) .* X +
-               (gammas[3] + U[id, 2] + Vs[2]) .* M +
-               (gammas[4] + U[id, 6] + Vs[6]) .* Time +
-               (gammas[1] + Cy*ybeta + U[id, 4] + Vs[4]);
+        mu_y = (gammas[2] + U[id, 2] + Vs[2]) .* X +
+               (gammas[3] + U[id, 3] + Vs[3]) .* M +
+               (gammas[4] + U[id, 4] + Vs[4]) .* Time +
+               (gammas[1] + Cy*ybeta + U[id, 1] + Vs[1]);
         // Regression M on X
         //     5 real dm;                    // Intercept
         //     6 real a;                     // X to M effect
         //     7 real tm;                    // t to M effect
 
-        mu_m = (gammas[6] + U[id, 3] + Vs[3]) .* X +
+        mu_m = (gammas[6] + U[id, 6] + Vs[6]) .* X +
                (gammas[7] + U[id, 7] + Vs[7]) .* Time +
                (gammas[5] + Cm*mbeta + U[id, 5] + Vs[5]);
         // // Data model
@@ -125,6 +126,7 @@ data {
     //// (centered at 0) priors for all these parameters
     // Population Param Priors
     real prior_bs;
+    real prior_sigmas;
     //ID Priors
     real prior_id_taus;
     real prior_id_lkj_shape;
@@ -139,6 +141,7 @@ data {
     vector[N] Y;                // Continuous outcome
 }
 transformed data{
+    int<lower = 0> N_sim = 0;
     int P = 7;                      // Number of person & ROI-varying variables: dm, dy, a, b, cp, ty, tm
                                     //   That is, intercept for m and y equations, a path, b path, c prime path,
                                     //   and 2 time effects.
@@ -177,6 +180,9 @@ transformed data{
             //int<lower=1,upper=J> id[N];
             x_i[k, (n_int + 1):(slen * Ni + n_int)] = id[ beg:end ];
         }
+    }
+    if(SIMULATE == 1){
+      N_sim = N;
     }
 }
 parameters{
@@ -246,49 +252,48 @@ model {
     gammas ~ normal(0, prior_bs);
     ybeta ~ normal(0, prior_ybeta);
     mbeta ~ normal(0, prior_mbeta);
+    sigma_y ~ exponential(prior_sigmas);
+    sigma_m ~ exponential(prior_sigmas);
     // SDs and correlation matrix ID-varying
-    Tau_id ~ cauchy(0, prior_id_taus);        // 1 u_cp
-                                              // 2 u_b
-                                              // 3 u_a
-                                              // 4 u_intercept_y
+    Tau_id ~ cauchy(0, prior_id_taus);        // 1 u_intercept_y
+                                              // 2 u_cp (X)
+                                              // 3 u_b  (M)
+                                              // 4 u_ty (Time)
                                               // 5 u_intercept_m
-                                              // 6 u_ty
-                                              // 7 u_tm
+                                              // 6 u_a  (X)
+                                              // 7 u_tm (Time)
     L_Omega_id ~ lkj_corr_cholesky(prior_id_lkj_shape);
     // SDs and correlation matrix ROI-varying
-    Tau_roi ~ cauchy(0, prior_roi_taus);      // 1 u_cp
-                                              // 2 u_b
-                                              // 3 u_a
-                                              // 4 u_intercept_y
+    Tau_roi ~ cauchy(0, prior_roi_taus);      // 1 u_intercept_y
+                                              // 2 u_cp (X)
+                                              // 3 u_b  (M)
+                                              // 4 u_ty (Time)
                                               // 5 u_intercept_m
-                                              // 6 u_ty
-                                              // 7 u_tm
+                                              // 6 u_a  (X)
+                                              // 7 u_tm (Time)
     L_Omega_roi ~ lkj_corr_cholesky(prior_roi_lkj_shape);
 
     // Allow vectorized sampling of varying effects via stdzd z_U, z_V
     to_vector(z_U) ~ normal(0, 1);
     to_vector(z_V) ~ normal(0, 1);//shardable over K rois
 
-    // // Regressions
-    // //     1 real dy;                    // Intercept
-    // //     2 real cp;                    // X to Y effect
-    // //     3 real b;                     // M to Y effect
-    // //     4 real ty;                    // t to Y effect
-    // mu_y = (gammas[2] + U[id, 1] + V[roi, 1]) .* X +
-    //        (gammas[3] + U[id, 2] + V[roi, 2]) .* M +
-    //        (gammas[4] + U[id, 6] + V[roi, 6]) .* Time +
-    //        (gammas[1] + Cy*ybeta + U[id, 4] + V[roi, 4]);
-    // // Regression M on X
-    // //     5 real dm;                    // Intercept
-    // //     6 real a;                     // X to M effect
-    // //     7 real tm;                    // t to M effect
-    //
-    // mu_m = (gammas[6] + U[id, 3] + V[roi, 3]) .* X +
-    //        (gammas[7] + U[id, 7] + V[roi, 7]) .* Time +
-    //        (gammas[5] + Cm*mbeta + U[id, 5] + V[roi, 5]);
-    // // Data model
-    // Y ~ normal(mu_y, sigma_y);
-    // M ~ normal(mu_m, sigma_m);
+     // // Regressions
+     //    //     1 real dy;                    // Intercept
+     //    //     2 real cp;                    // X to Y effect
+     //    //     3 real b;                     // M to Y effect
+     //    //     4 real ty;                    // t to Y effect
+     //    mu_y = (gammas[2] + U[id, 2] + Vs[2]) .* X +
+     //           (gammas[3] + U[id, 3] + Vs[3]) .* M +
+     //           (gammas[4] + U[id, 4] + Vs[4]) .* Time +
+     //           (gammas[1] + Cy*ybeta + U[id, 1] + Vs[1]);
+     //    // Regression M on X
+     //    //     5 real dm;                    // Intercept
+     //    //     6 real a;                     // X to M effect
+     //    //     7 real tm;                    // t to M effect
+     //
+     //    mu_m = (gammas[6] + U[id, 6] + Vs[6]) .* X +
+     //           (gammas[7] + U[id, 7] + Vs[7]) .* Time +
+     //           (gammas[5] + Cm*mbeta + U[id, 5] + Vs[5]);
     if(SIMULATE == 0){
         target += sum(map_rect(hlm_med, append_row(gammas,
                                          append_row(ybeta,
@@ -337,6 +342,14 @@ generated quantities{
     vector[K] v_pme;
 
     // Re-named tau parameters for easy output
+    real dy;
+    real cp;
+    real b;
+    real ty;
+    real dm;
+    real a;
+    real tm;
+
     real tau_id_cp;
     real tau_id_b;
     real tau_id_a;
@@ -352,22 +365,31 @@ generated quantities{
     real tau_roi_ty;
     real tau_roi_tm;
 
-    real Y_sim[N];
-    real M_sim[N];
+    real Y_sim[N_sim];
+    real M_sim[N_sim];
 
-    tau_id_cp = Tau_id[1];
-    tau_id_b = Tau_id[2];
-    tau_id_a = Tau_id[3];
-    tau_id_dy = Tau_id[4];
-    tau_id_dm = Tau_id[5];
-    tau_id_ty = Tau_id[6];
-    tau_id_tm = Tau_id[7];
-    tau_roi_cp = Tau_roi[1];
-    tau_roi_b = Tau_roi[2];
-    tau_roi_a = Tau_roi[3];
-    tau_roi_dy = Tau_roi[4];
+
+    // 1 u_intercept_y
+    // 2 u_cp (X)
+    // 3 u_b  (M)
+    // 4 u_ty (Time)
+    // 5 u_intercept_m
+    // 6 u_a  (X)
+    // 7 u_tm (Time)
+
+    tau_id_dy =  Tau_id[1];
+    tau_id_cp =  Tau_id[2];
+    tau_id_b =   Tau_id[3];
+    tau_id_ty =  Tau_id[4];
+    tau_id_dm =  Tau_id[5];
+    tau_id_a =   Tau_id[6];
+    tau_id_tm =  Tau_id[7];
+    tau_roi_dy = Tau_roi[1];
+    tau_roi_cp = Tau_roi[2];
+    tau_roi_b =  Tau_roi[3];
+    tau_roi_ty = Tau_roi[4];
     tau_roi_dm = Tau_roi[5];
-    tau_roi_ty = Tau_roi[6];
+    tau_roi_a =  Tau_roi[6];
     tau_roi_tm = Tau_roi[7];
 
     Omega_id = L_Omega_id * L_Omega_id';
@@ -384,10 +406,10 @@ generated quantities{
     //      be correct but it's a very naive extension
     //      of the case where there is only one grouping
     //      factor.
-    covab_id = Sigma_id[3,2];
-    corrab_id = Omega_id[3,2];
-    covab_roi = Sigma_roi[3,2];
-    corrab_roi = Omega_roi[3,2];
+    covab_id = Sigma_id[6,3];
+    corrab_id = Omega_id[6,3];
+    covab_roi = Sigma_roi[6,3];
+    corrab_roi = Omega_roi[6,3];
     // vector[P] gammas;
     // //     1 real dy;                    // Intercept
     // //     2 real cp;                    // X to Y effect
@@ -401,25 +423,34 @@ generated quantities{
     c = gammas[2] + me;
     pme = me / c;
 
-    u_a = gammas[6] + U[, 3];
-    u_b = gammas[3] + U[, 2];
-    u_cp = gammas[2] + U[, 1];
-    u_dy = gammas[1] + U[, 4];
+    dy = gammas[1];
+    cp = gammas[2];
+    b =  gammas[3];
+    ty = gammas[4];
+    dm = gammas[5];
+    a =  gammas[6];
+    tm = gammas[7];
+
+
+    u_a = gammas[6] + U[, 6];
+    u_b = gammas[3] + U[, 3];
+    u_cp = gammas[2] + U[, 2];
+    u_dy = gammas[1] + U[, 1];
     u_dm = gammas[5] + U[, 5];
-    u_ty = gammas[4] + U[, 6];
+    u_ty = gammas[4] + U[, 4];
     u_tm = gammas[7] + U[, 7];
-    u_me = (gammas[6] + U[, 3]) .* (gammas[3] + U[, 2]) + covab_roi; // include covariance due to the ROI grouping factor
+    u_me = (gammas[6] + U[, 6]) .* (gammas[3] + U[, 3]) + covab_roi; // include covariance due to the ROI grouping factor
     u_c = u_cp + u_me;
     u_pme = u_me ./ u_c;
 
-    v_a = gammas[6]+ V[, 3];
-    v_b = gammas[3]+ V[, 2];
-    v_cp = gammas[2] + V[, 1];
-    v_dy = gammas[1] + V[, 4];
+    v_a = gammas[6]+ V[, 6];
+    v_b = gammas[3]+ V[, 3];
+    v_cp = gammas[2] + V[, 2];
+    v_dy = gammas[1] + V[, 1];
     v_dm = gammas[5] + V[, 5];
-    v_ty = gammas[4] + V[, 6];
+    v_ty = gammas[4] + V[, 4];
     v_tm = gammas[7] + V[, 7];
-    v_me = (gammas[6] + V[, 3]) .* (gammas[3] + V[, 2]) + covab_id; // include covariance due to the ROI grouping factor
+    v_me = (gammas[6] + V[, 6]) .* (gammas[3] + V[, 3]) + covab_id; // include covariance due to the ROI grouping factor
     v_c = v_cp + v_me;
     v_pme = v_me ./ v_c;
 
@@ -433,16 +464,16 @@ generated quantities{
             //     2 real cp;                    // X to Y effect
             //     3 real b;                     // M to Y effect
             //     4 real ty;                    // t to Y effect
-            mu_y = (gammas[2] + U[id, 1] + V[roi, 1]) .* X +
-                   (gammas[3] + U[id, 2] + V[roi, 2]) .* M +
-                   (gammas[4] + U[id, 6] + V[roi, 6]) .* Time +
-                   (gammas[1] + Cy*ybeta + U[id, 4] + V[roi, 4]);
+            mu_y = (gammas[2] + U[id, 2] + V[roi, 2]) .* X +
+                   (gammas[3] + U[id, 3] + V[roi, 3]) .* M +
+                   (gammas[4] + U[id, 4] + V[roi, 4]) .* Time +
+                   (gammas[1] + Cy*ybeta + U[id, 1] + V[roi, 1]);
             // Regression M on X
             //     5 real dm;                    // Intercept
             //     6 real a;                     // X to M effect
             //     7 real tm;                    // t to M effect
 
-            mu_m = (gammas[6] + U[id, 3] + V[roi, 3]) .* X +
+            mu_m = (gammas[6] + U[id, 6] + V[roi, 6]) .* X +
                    (gammas[7] + U[id, 7] + V[roi, 7]) .* Time +
                    (gammas[5] + Cm*mbeta + U[id, 5] + V[roi, 5]);
             // Data model

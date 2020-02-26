@@ -132,18 +132,25 @@ model {
     //     2 real cp;                    // X to Y effect
     //     3 real b;                     // M to Y effect
     //     4 real ty;                    // t to Y effect
-    mu_y = (gammas[2] + U[id, 1] + V[roi, 1]) .* X +
-           (gammas[3] + U[id, 2] + V[roi, 2]) .* M +
-           (gammas[4] + U[id, 6] + V[roi, 6]) .* Time +
-           (gammas[1] + Cy*ybeta + U[id, 4] + V[roi, 4]);
+    // tau_roi_cp = Tau_roi[1];
+    // tau_roi_b = Tau_roi[2];
+    // tau_roi_a = Tau_roi[3];
+    // tau_roi_dy = Tau_roi[4];
+    // tau_roi_dm = Tau_roi[5];
+    // tau_roi_ty = Tau_roi[6];
+    // tau_roi_tm = Tau_roi[7];
+    mu_y = (gammas[2] + U[id, 1] + V[roi, 1]) .* X +       // cp
+           (gammas[3] + U[id, 2] + V[roi, 2]) .* M +       // b
+           (gammas[4] + U[id, 6] + V[roi, 6]) .* Time +    // ty
+           (gammas[1] + Cy*ybeta + U[id, 4] + V[roi, 4]);  // dy
     // Regression M on X
     //     5 real dm;                    // Intercept
     //     6 real a;                     // X to M effect
     //     7 real tm;                    // t to M effect
 
-    mu_m = (gammas[6] + U[id, 3] + V[roi, 3]) .* X +
-           (gammas[7] + U[id, 7] + V[roi, 7]) .* Time +
-           (gammas[5] + Cm*mbeta + U[id, 5] + V[roi, 5]);
+    mu_m = (gammas[6] + U[id, 3] + V[roi, 3]) .* X +       // a
+           (gammas[7] + U[id, 7] + V[roi, 7]) .* Time +    // tm
+           (gammas[5] + Cm*mbeta + U[id, 5] + V[roi, 5]);  // dm
     // Data model
     Y ~ normal(mu_y, sigma_y);
     M ~ normal(mu_m, sigma_m);

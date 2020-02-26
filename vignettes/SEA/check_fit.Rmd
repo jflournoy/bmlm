@@ -1,0 +1,221 @@
+---
+title: "Untitled"
+author: "John Flournoy"
+date: "2/25/2020"
+output: 
+    html_document:
+        toc: yes
+        toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(cmdstanr)
+library(rstan)
+library(bayesplot)
+
+set_cmdstan_path('~/code_new/cmdstan/')
+datadir <- '/data/jflournoy/SEA/roi_bayes/eptot.gad_lead.fear/'
+
+stanfit <- rstan::read_stan_csv(paste0(datadir, 'sea_fit_map_td15_', 1:4, '_brief.csv'))
+
+rx_means <- function(afit, terms, indices){
+    pars_ <- expand.grid(index = indices, term = terms)
+    pars <- paste0(pars_[, 'term'], '[', pars_[, 'index'], ']')
+    sum <- rstan::summary(afit, pars = pars, probs = c(.5))
+    sum_names <- dimnames(sum$summary)[[1]]
+    sum_listed <- lapply(terms, function(term){
+        sum$summary[grep(term, sum_names, value = T), 'mean']
+    })
+    return(sum_listed)
+}
+
+orderd_rx <- function(afit, terms, indices){
+    pars_ <- expand.grid(index = indices, term = terms)
+    pars <- paste0(pars_[, 'term'], '[', pars_[, 'index'], ']')
+    sum <- rstan::summary(afit, pars = pars, probs = c(.5))
+    pars_ordered_ <- dimnames(sum$summary)[[1]][order(sum$summary[,'mean'])]
+    pars_ordered <- lapply(terms, function(term){
+        grep(term, pars_ordered_, value = T)
+    })
+    return(pars_ordered)
+}
+
+roi_pars_ordered <- orderd_rx(stanfit,
+                              terms = list(a = 'v_a', b = 'v_b',
+                                           cp = 'v_cp',
+                                           me = 'v_me', pme = 'v_pme'),
+                              indices = 1:718)
+
+id_pars_ordered <- orderd_rx(stanfit,
+                             terms = list(a = 'u_a', b = 'u_b', me = 'u_me'),
+                             indices = 1:29)
+
+```
+
+# eptot.gad_lead.fear
+
+## ROIs 
+
+### mediated effect
+
+```{r fig.height=12, fig.width=10}
+roi_me_plot <- bayesplot::mcmc_intervals(stanfit, pars = roi_pars_ordered$me,
+                                        point_est = 'mean', prob = .8, prob_outer = .95)
+roi_me_plot$layers[[3]]$aes_params$size <- .1
+roi_me_plot$layers[[2]]$aes_params$size <- .1
+roi_me_plot$layers[[4]]$aes_params$size <- 1
+roi_me_plot
+```
+
+### path a
+
+```{r fig.height=12, fig.width=10}
+roi_a_plot <- bayesplot::mcmc_intervals(stanfit, pars = roi_pars_ordered$a,
+                                        point_est = 'mean', prob = .8, prob_outer = .95)
+roi_a_plot$layers[[3]]$aes_params$size <- .1
+roi_a_plot$layers[[2]]$aes_params$size <- .1
+roi_a_plot$layers[[4]]$aes_params$size <- 1
+roi_a_plot
+```
+
+### path b
+
+```{r fig.height=12, fig.width=10}
+roi_b_plot <- bayesplot::mcmc_intervals(stanfit, pars = roi_pars_ordered$b,
+                                        point_est = 'mean', prob = .8, prob_outer = .95)
+roi_b_plot$layers[[3]]$aes_params$size <- .1
+roi_b_plot$layers[[2]]$aes_params$size <- .1
+roi_b_plot$layers[[4]]$aes_params$size <- 1
+roi_b_plot
+```
+
+## IDs
+
+### mediated effect
+
+```{r}
+bayesplot::mcmc_intervals(stanfit, pars = id_pars_ordered$me)
+```
+
+### path a
+
+```{r}
+bayesplot::mcmc_intervals(stanfit, pars = id_pars_ordered$a)
+```
+
+### path b
+
+```{r}
+bayesplot::mcmc_intervals(stanfit, pars = id_pars_ordered$b)
+```
+
+# The population parameters
+
+```{r}
+bayesplot::mcmc_areas_ridges(stanfit, regex_pars = 'gammas\\[[23467]\\]', prob_outer = .99, prob = .95)
+```
+
+# Some diagnostic plots
+
+```{r}
+bayesplot::mcmc_trace(stanfit, regex_pars = 'gammas\\[[123]\\]')
+bayesplot::mcmc_trace(stanfit, regex_pars = 'gammas\\[[456]\\]')
+bayesplot::mcmc_trace(stanfit, regex_pars = 'v_a\\[[1-9]\\]')
+bayesplot::mcmc_trace(stanfit, regex_pars = 'u_a\\[[1-9]\\]')
+bayesplot::mcmc_trace(stanfit, regex_pars = 'Tau_id\\[[1-6]\\]')
+bayesplot::mcmc_trace(stanfit, regex_pars = 'Tau_roi\\[[1-6]\\]')
+```
+
+# Compare to raw
+
+```{r}
+library(lme4)
+library(parallel)
+library(data.table)
+
+datadir <- '/data/jflournoy/SEA/roi_bayes/eptot.gad_lead.fear/'
+
+stanfit <- rstan::read_stan_csv(paste0(datadir, 'sea_fit_map_td15_', 1:4, '_brief.csv'))
+
+load('../../data/sea_fearGTcalm_stress_psych.rda')
+
+cl <- makeForkCluster(6)
+
+a_path_ <- parLapply(cl = cl, split(1:718, rep(1:6, each = ceiling(718/6))), function(is){
+    r <- lapply(is, function(i){
+        amod <- lmer(GAD7_TOT_lead ~ 1 + WCEN_EPISODICTOT + GCEN_EPISODICTOT + 
+                         fearGTcalm_WCEN + fearGTcalm_GCEN + (1 | idnum), 
+                     data = sea_fearGTcalm_stress_psych[roi == i])
+        
+        rez <- coef(summary(amod))['fearGTcalm_WCEN',]
+        return(rez)   
+    })
+    return(r)
+})
+a_path <- unlist(a_path_, recursive = F)
+
+b_path_ <- parLapply(cl = cl, split(1:718, rep(1:6, each = ceiling(718/6))), function(is){
+    r <- lapply(is, function(i){
+        amod <- lmer(fearGTcalm ~ 1 + WCEN_EPISODICTOT + GCEN_EPISODICTOT + (1 | idnum), 
+                     data = sea_fearGTcalm_stress_psych[roi == i])
+        
+        rez <- coef(summary(amod))['WCEN_EPISODICTOT',]
+        return(rez)   
+    })
+    return(r)
+})
+b_path <- unlist(b_path_, recursive = F)
+stopCluster(cl)
+
+a_path_df <- data.table(do.call(rbind, a_path))
+a_path_df[,c('roi', 
+             'lower', 'upper', 
+             'll', 'uu') := list(factor(1:718, levels = (1:718)[order(Estimate, decreasing = T)]), 
+                                 Estimate - 2*`Std. Error`, 
+                                 Estimate + 2*`Std. Error`,
+                                 Estimate - 2.6*`Std. Error`, 
+                                 Estimate + 2.6*`Std. Error`)]
+b_path_df <- data.table(do.call(rbind, b_path))
+b_path_df[,c('roi', 
+             'lower', 'upper', 
+             'll', 'uu') := list(factor(1:718, levels = (1:718)[order(Estimate, decreasing = T)]), 
+                                 Estimate - 2*`Std. Error`, 
+                                 Estimate + 2*`Std. Error`,
+                                 Estimate - 2.6*`Std. Error`, 
+                                 Estimate + 2.6*`Std. Error`)]
+```
+
+```{r fig.height=16, fig.width=10}
+ggplot(a_path_df, aes(x = Estimate, y = roi)) + 
+    geom_vline(xintercept = 0) + 
+    geom_segment(aes(x = ll, xend = uu, y = roi, yend = roi),
+                 size = .2) + 
+    geom_segment(aes(x = lower, xend = upper, y = roi, yend = roi),
+                 size = .3) + 
+    geom_point()
+ggplot(b_path_df, aes(x = Estimate, y = roi)) + 
+    geom_vline(xintercept = 0) + 
+    geom_segment(aes(x = ll, xend = uu, y = roi, yend = roi),
+                 size = .2) + 
+    geom_segment(aes(x = lower, xend = upper, y = roi, yend = roi),
+                 size = .3) + 
+    geom_point()
+```
+
+```{r}
+ab_means <- rx_means(stanfit, terms = list(a = 'v_a', b = 'v_b', cp = 'v_cp'), 1:718)
+a_mean_df <- data.table(mean = ab_means$a, roi = gsub('v_a\\[(.*)\\]', '\\1', names(ab_means$a)))
+ggplot(a_path_df[a_mean_df, on = 'roi'], aes(x = Estimate, y = mean)) +
+    geom_point() +
+    geom_smooth(method = 'lm')
+b_mean_df <- data.table(mean = ab_means$b, roi = gsub('v_b\\[(.*)\\]', '\\1', names(ab_means$b)))
+ggplot(b_path_df[b_mean_df, on = 'roi'], aes(x = Estimate, y = mean)) +
+    geom_point() +
+    geom_smooth(method = 'lm')
+cp_mean_df <- data.table(mean = ab_means$cp, roi = gsub('v_cp\\[(.*)\\]', '\\1', names(ab_means$cp)))
+ggplot(a_path_df[cp_mean_df, on = 'roi'], aes(x = Estimate, y = mean)) +
+    geom_point() +
+    geom_smooth(method = 'lm')
+
+```

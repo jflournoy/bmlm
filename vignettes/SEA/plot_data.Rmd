@@ -1,0 +1,141 @@
+---
+title: "Plot SEA ROI data"
+author: "John Flournoy"
+date: "`r format(Sys.time(), '%Y-%m-%d %I:%M %p')`"
+output: 
+  html_document: 
+    fig_caption: yes
+    highlight: textmate
+    self_contained: no
+    theme: spacelab
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(data.table)
+```
+
+
+```{r}
+load('../../data/sea_fearGTcalm_stress_psych.rda')
+roidf <- copy(sea_fearGTcalm_stress_psych[,.(idnum, time, roi, fearGTcalm)])
+```
+
+
+```{r results='asis'}
+plot_hists <- function(roi_range, adt, fig.dir = 'fig'){
+    if(!dir.exists(fig.dir)){
+        dir.create(fig.dir)
+    }
+    filename <- file.path(fig.dir, paste0('histogram-rois_', paste(range(roi_range), collapse = '-'), '.png'))
+    
+    if(!file.exists(filename)){
+        aplot <- ggplot(adt[get('roi') %in% roi_range], aes(x = fearGTcalm)) + 
+            geom_hline(yintercept = 0, size = .25, color = '#999999') +
+            geom_histogram(binwidth = .25, aes(fill = fearGTcalm < 0)) +
+            facet_grid(roi ~ time) +
+            scale_y_continuous(breaks = c(0, 10)) +
+            theme_minimal() + 
+            theme(panel.spacing = unit(0, 'in'),
+                  panel.border = element_rect(fill = NA, size = 0, color = '#999999'),
+                  panel.grid.major = element_blank(),
+                  panel.grid.minor = element_blank(),
+                  axis.line.x = element_line(color = '#000000', size = .75),
+                  axis.line.y = element_line(color = '#000000', size = .75),
+                  legend.position = 'none')+
+            coord_cartesian(xlim = range(roidf$fearGTcalm))
+        
+        ggsave(filename = filename, plot = aplot, 
+               device = 'png', width = 10, 
+               height = 6, units = 'in', dpi = 300)
+    }
+    md <- paste0('![ROI Histograms ', paste(range(roi_range), collapse = '-'),
+                 '](', filename,' "ROI Histograms ', paste(range(roi_range), collapse = '-'), '")')
+}
+
+max_roi <- 718
+max_per_plot <- 15
+figuremarkdown <- lapply(split(1:max_roi, (1:max_roi - 1) %/% max_per_plot), 
+                         plot_hists, adt = roidf)
+cat(paste(figuremarkdown, collapse = '\n'))
+```
+
+```{r results='asis'}
+suppressMessages(library(lessR))
+
+filename <- file.path('fig', 'heatmap-roi_cors-all.png')
+if(!file.exists(filename)){
+    acormat <- cor(dcast(roidf, idnum + time ~ roi, value.var = 'fearGTcalm')[,-(1:2)])
+    acormat_reorder <- corReorder(R = acormat, heat_map = FALSE)
+    png(filename)
+    lessR:::corHeatMap(acormat_reorder, width=5, height=5)
+    dev.off()
+}
+
+cat('# Within-person ROI correlations across 10 months\n')
+
+cat(paste0('![Within-person Heatmap across all IDs](', 
+           filename, 
+           ' "Within-person Heatmap across all IDs")\n'))
+
+uids <- unique(roidf$idnum)
+ordered_mats <- lapply(uids, function(thisid, fig.dir='fig'){
+    if(!dir.exists(fig.dir)){
+        dir.create(fig.dir)
+    }
+    filename <- file.path(fig.dir, paste0('heatmap-roi_cors-', thisid, '.png'))
+    adf <- copy(roidf[get('idnum') == thisid])
+    acormat <- cor(dcast(adf, idnum + time ~ roi, value.var = 'fearGTcalm')[,-(1:2)])
+    acormat_reorder <- corReorder(R = acormat, heat_map = FALSE)
+    if(!file.exists(filename)){
+        png(filename)
+        lessR:::corHeatMap(acormat_reorder, width=5, height=5)
+        dev.off()
+    }
+    md <- paste0('![Individual Heatmap for ID ', thisid,
+                 '](', filename,' "Individual Heatmap for ID ', thisid,
+                 '")')
+    return(list(R = acormat_reorder, md = md, id = thisid))
+})
+
+invisible(lapply(ordered_mats, function(amat){
+    cat(paste0('## ', amat[['id']]))
+    cat(amat[['md']])
+    cat('\n')
+    return(NULL)
+}))
+```
+
+```{r results='asis'}
+filename <- file.path('fig', paste0('histogram-all_rois.png'))
+
+if(!file.exists(filename)){
+    aplot <- ggplot(roidf, aes(x = fearGTcalm)) + 
+        geom_hline(yintercept = 0, size = .25, color = '#999999') +
+        geom_histogram(binwidth = .25, aes(fill = fearGTcalm < 0)) +
+        facet_grid(idnum ~ time) +
+        scale_y_continuous(breaks = c(0, 100, 200)) +
+        theme_minimal() + 
+        theme(panel.spacing = unit(0, 'in'),
+              panel.border = element_rect(fill = NA, size = 0, color = '#999999'),
+              panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              axis.line.x = element_line(color = '#000000', size = .75),
+              axis.line.y = element_line(color = '#000000', size = .75),
+              legend.position = 'none')+
+        coord_cartesian(xlim = range(roidf$fearGTcalm))
+    
+    ggsave(filename = filename, plot = aplot, 
+           device = 'png', width = 10, 
+           height = 12, units = 'in', dpi = 300)
+}
+
+cat(paste0('![Histogram across all ROIs](', 
+           filename, 
+           ' "Histogram across all ROIs")\n'))
+```
+
+
+
